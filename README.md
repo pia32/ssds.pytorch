@@ -1,3 +1,20 @@
+Commands to train below. Training took two days and four hours, starting from a Resnet-50 SSD for VOC2007.
+
+```
+python train.py --cfg=./experiments/cfgs/ssd_resnet50_train_jacquard.yml
+```
+
+Then start tensorboard. CD to `experiments/models/ssd_resnet50_jacquard` folder, and then
+
+```
+tensorboard --logdir=.
+```
+
+Finally, to eval, change the PHASE parameter in the YAML file, and run.....
+```
+python test.py --cfg=./experiments/cfgs/ssd_resnet50_train_jacquard.yml
+```
+
 # ssds.pytorch
 Repository for Single Shot MultiBox Detector and its variants, implemented with pytorch, python3.
 
