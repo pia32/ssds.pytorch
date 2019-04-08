@@ -1,9 +1,11 @@
 from lib.dataset import voc
 from lib.dataset import coco
+from lib.dataset import jacquard
 
 dataset_map = {
                 'voc': voc.VOCDetection,
                 'coco': coco.COCODetection,
+                'jacquard': jacquard.JACQUARDDetection,
             }
 
 def gen_dataset_fn(name):

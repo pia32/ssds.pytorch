@@ -39,7 +39,7 @@ POST_PROCESS:
   MAX_DETECTIONS: 100
 
 DATASET:
-  DATASET: 'voc'
+  DATASET: 'jacquard'
   DATASET_DIR: '../datasets/jacquard_voc'
   TRAIN_SETS: [['2007', 'trainval']]
   TEST_SETS:  [['2007', 'test']]
