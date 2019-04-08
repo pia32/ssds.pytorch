@@ -230,7 +230,7 @@ class Solver(object):
                 self.exp_lr_scheduler.step(epoch-warm_up)
             if 'train' in cfg.PHASE:
                 self.train_epoch(self.model, self.train_loader, self.optimizer, self.criterion, self.writer, epoch, self.use_gpu)
-            if 'eval' in cfg.PHASE:
+            if 'eval' in cfg.PHASE and epoch % cfg.TRAIN.EVAL_EPOCHS == 0:
                 self.eval_epoch(self.model, self.eval_loader, self.detector, self.criterion, self.writer, epoch, self.use_gpu)
             if 'test' in cfg.PHASE:
                 self.test_epoch(self.model, self.test_loader, self.detector, self.output_dir, self.use_gpu)
@@ -322,7 +322,7 @@ class Solver(object):
         # log for tensorboard
         writer.add_scalar('Train/loc_loss', loc_loss/epoch_size, epoch)
         writer.add_scalar('Train/conf_loss', conf_loss/epoch_size, epoch)
-        writer.add_scalar('Train/lr', lr, epoch)
+        writer.add_scalar('Train/log_lr', np.log10(lr), epoch)
 
 
     def eval_epoch(self, model, data_loader, detector, criterion, writer, epoch, use_gpu):

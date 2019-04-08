@@ -91,6 +91,7 @@ __C.TRAIN.BATCH_SIZE = 128
 __C.TRAIN.TRAINABLE_SCOPE = 'base,extras,norm,loc,conf'
 __C.TRAIN.RESUME_SCOPE = ''
 
+__C.TRAIN.EVAL_EPOCHS = 1
 # ---------------------------------------------------------------------------- #
 # optimizer options
 # ---------------------------------------------------------------------------- #
