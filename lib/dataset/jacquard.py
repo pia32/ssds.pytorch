@@ -8,7 +8,9 @@ import torchvision.transforms as transforms
 from PIL import Image, ImageDraw, ImageFont
 import cv2
 import numpy as np
-from .voc_eval import voc_eval
+from operator import itemgetter
+from skimage.draw import polygon
+
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
 else:
@@ -272,35 +274,164 @@ class JACQUARDDetection(data.Dataset):
         print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
         if output_dir is not None and not os.path.isdir(output_dir):
             os.mkdir(output_dir)
-        for i, cls in enumerate(VOC_CLASSES):
 
+        detDB = {}
+
+        for i, cls in enumerate(VOC_CLASSES):
             if cls == '__background__':
                 continue
 
             filename = self._get_voc_results_file_template().format(cls)
-            rec, prec, ap = voc_eval(
-                                    filename, annopath, imagesetfile, cls, cachedir, ovthresh=0.5,
-                                    use_07_metric=use_07_metric)
-            aps += [ap]
-            print('AP for {} = {:.4f}'.format(cls, ap))
-            if output_dir is not None:
-                with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
-                    pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
-        print('Mean AP = {:.4f}'.format(np.mean(aps)))
-        print('~~~~~~~~')
-        print('Results:')
-        for ap in aps:
-            print('{:.3f}'.format(ap))
-        print('{:.3f}'.format(np.mean(aps)))
-        print('~~~~~~~~')
-        print('')
-        print('--------------------------------------------------------------')
-        print('Results computed with the **unofficial** Python eval code.')
-        print('Results should be very close to the official MATLAB eval code.')
-        print('Recompute with `./tools/reval.py --matlab ...` for your paper.')
-        print('-- Thanks, The Management')
-        print('--------------------------------------------------------------')
-        return aps,np.mean(aps)
+
+            detfile = filename.format(cls)
+            with open(detfile, 'r') as f:
+                lines = f.readlines()
+
+            splitlines = [x.strip().split(' ') for x in lines]
+            image_ids = [x[0] for x in splitlines]
+            confidence = np.array([float(x[1]) for x in splitlines])
+            BB = np.array([[float(z) for z in x[2:]] for x in splitlines])
+
+            for j in range(len(image_ids)):
+                im_loc = image_ids[j]
+                conf_loc = confidence[j]
+                bb_loc = BB[j, :]
+
+                if im_loc not in detDB:
+                    detDB[im_loc] = []
+
+                bb_entry = [conf_loc, int(cls), bb_loc[0], bb_loc[1], bb_loc[2], bb_loc[3]] #confidence, class, xmin, ymin, xmax, ymax
+                detDB[im_loc].append(bb_entry)
+
+        with open(imagesetfile, 'r') as f:
+            lines = f.readlines()
+        imagenames = [x.strip() for x in lines]
+
+        total = 0
+        suc = 0
+
+        for im in imagenames:#foreach image
+            if im not in detDB:
+                print("No detections for image", im)
+                continue
+
+            bbDB = sorted(detDB[im], key=itemgetter(0), reverse=True)
+            bestBB = bbDB[0]
+            gtbbs = self.parse_rec(annopath.format(im))
+
+            max_iou = self.calc_max_iou(bestBB, gtbbs)
+
+            total += 1
+            if max_iou > 0.25:
+                suc += 1
+
+            if total % 100 == 0:
+                print(suc, total, suc/total)
+
+        acc = suc / total
+        print("FINAL ACCURACY", acc)
+        return acc, acc
+
+    def bb_to_corners(self, bb, angle_classes = 19):
+        corners = np.zeros((4, 2))
+
+        x = (bb[4] + bb[2]) / 2.0
+        y = (bb[5] + bb[3]) / 2.0
+        width = bb[4] - bb[2]
+        height = bb[5] - bb[3]
+        angle = (bb[1] - 1) / angle_classes * np.pi
+
+        corners = np.zeros((4, 2));
+        corners[0, 0] = -width / 2;
+        corners[0, 1] = height / 2;
+        corners[1, 0] = width / 2;
+        corners[1, 1] = height / 2;
+        corners[2, 0] = width / 2;
+        corners[2, 1] = -height / 2;
+        corners[3, 0] = -width / 2;
+        corners[3, 1] = -height / 2;
+
+        rot = [[np.cos(angle), np.sin(angle)], [-np.sin(angle), np.cos(angle)]]
+        corners = np.dot(corners, rot)
+
+        corners = corners + np.array([x, y])
+
+        return corners, angle
+
+    def calc_max_iou(self, bb, gtbbs, visualize=False):
+        max_iou = 0
+        corners1, angle1 = self.bb_to_corners(bb)
+
+        if visualize:
+            img = np.zeros((1024, 1024, 3), np.uint8)
+            self.cv2corners(img, corners1, color=(0, 255, 0))
+
+        for i in range(len(gtbbs)):
+            gtbb = gtbbs[i]
+            gtbb = [1, int(gtbb['name']), gtbb['bbox'][0], gtbb['bbox'][1], gtbb['bbox'][2], gtbb['bbox'][3]]
+            corners2, angle2 = self.bb_to_corners(gtbb)
+
+            if visualize:
+                self.cv2corners(img, corners2)
+
+            if abs(angle2 - angle1) > np.pi / 6:
+                continue
+
+            iou = self.calc_iou(corners1, corners2)
+            max_iou = max(iou, max_iou)
+
+        if visualize:
+            print(max_iou)
+            cv2.imshow('result', img)
+            cv2.waitKey(0)
+
+        return max_iou
+
+    def calc_iou(self, corners1, corners2):
+        rr1, cc1 = polygon(corners1[:, 0], corners1[:, 1])
+        rr2, cc2 = polygon(corners2[:, 0], corners2[:, 1])
+
+        try:
+            r_max = max(rr1.max(), rr2.max()) + 1
+            c_max = max(cc1.max(), cc2.max()) + 1
+        except:
+            return 0
+
+        canvas = np.zeros((r_max, c_max))
+        canvas[rr1, cc1] += 1
+        canvas[rr2, cc2] += 1
+        union = np.sum(canvas > 0)
+        if union == 0:
+            return 0
+        intersection = np.sum(canvas == 2)
+
+        return intersection * 1.0 / union
+
+    def cv2corners(self, img, corners, color=(255, 0, 0)):
+        for i in range(4):
+            nextI = (i + 1) % 4
+            c1 = (int(corners[i, 0]), int(corners[i, 1]))
+            c2 = (int(corners[nextI, 0]), int(corners[nextI, 1]))
+            cv2.line(img, c1, c2, color, 3)
+
+    def parse_rec(self, filename):
+        """ Parse a PASCAL VOC xml file """
+        tree = ET.parse(filename)
+        objects = []
+        for obj in tree.findall('object'):
+            obj_struct = {}
+            obj_struct['name'] = obj.find('name').text
+            # obj_struct['pose'] = obj.find('pose').text
+            obj_struct['truncated'] = int(obj.find('truncated').text)
+            obj_struct['difficult'] = int(obj.find('difficult').text)
+            bbox = obj.find('bndbox')
+            obj_struct['bbox'] = [int(bbox.find('xmin').text),
+                                  int(bbox.find('ymin').text),
+                                  int(bbox.find('xmax').text),
+                                  int(bbox.find('ymax').text)]
+            objects.append(obj_struct)
+
+        return objects
 
     def show(self, index):
         img, target = self.__getitem__(index)

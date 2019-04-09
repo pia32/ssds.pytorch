@@ -2,3 +2,5 @@ opencv-python
 matplotlib
 tensorboardX
 torchvision
+scikit-image
+pyyaml
