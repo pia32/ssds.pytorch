@@ -10,7 +10,7 @@ MODEL:
   ASPECT_RATIOS: [[1, 2, 3], [1, 2, 3], [1, 2, 3], [1, 2, 3], [1, 2], [1, 2]]
 
 TRAIN:
-  MAX_EPOCHS: 30
+  MAX_EPOCHS: 50
   CHECKPOINTS_EPOCHS: 1
   EVAL_EPOCHS: 20
   BATCH_SIZE: 32
@@ -26,7 +26,7 @@ TRAIN:
 
 TEST:
   BATCH_SIZE: 16
-  TEST_SCOPE: [27, 30]
+  TEST_SCOPE: [47, 50]
 
 MATCHER:
   MATCHED_THRESHOLD: 0.5
@@ -47,5 +47,5 @@ DATASET:
 EXP_DIR: './experiments/models/fssd_vgg16_jacquard'
 LOG_DIR: './experiments/models/fssd_vgg16_jacquard'
 RESUME_CHECKPOINT: './weights/fssd/vgg16_fssd_voc_77.8.pth'
-PHASE: ['train', 'eval']
-#PHASE: ['test']
+#PHASE: ['train', 'eval']
+PHASE: ['test']
